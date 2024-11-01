@@ -348,6 +348,7 @@ langchain-utils==0.8.0
 langchainhub==0.1.14
 langdetect==1.0.9
 langsmith==0.1.83
+llama-index-core==3.8.0
 lapx==0.5.9
 lazy-imports==0.3.1
 libclang==18.1.1
