@@ -9,6 +9,7 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import joblib
 # Add this import
 from investmentt import RealEstateInvestmentAnalyzer
+import os
 
 class RealEstateMLModel:
     def __init__(self):
@@ -213,7 +214,37 @@ def train_models():
         models[target] = model
     
     return models
-
+def train_and_save_models():
+    """Train and save models for all targets"""
+    # Create models directory if it doesn't exist
+    os.makedirs('models', exist_ok=True)
+    
+    print("Generating training data...")
+    df = generate_training_data(1000)
+    
+    targets = ['total_investment', 'total_revenue', 'gross_profit', 
+              'annual_rent', 'roi']
+    
+    features = ['property_type', 'district', 'land_area', 'num_floors']
+    
+    for target in targets:
+        print(f"\nTraining model for {target}...")
+        
+        X = df[features]
+        y = df[target]
+        
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+        
+        model = RealEstateMLModel()
+        model.fit(X_train, y_train)
+        
+        # Save model in models directory
+        model_path = os.path.join('models', f'model_{target}.joblib')
+        model.save_model(model_path)
+        print(f"Model saved as {model_path}")
+        
 if __name__ == "__main__":
     print("Starting model training process...")
     try:

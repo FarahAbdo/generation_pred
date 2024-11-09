@@ -105,61 +105,43 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from investmentt import RealEstateInvestmentAnalyzer
-from ml_model import RealEstateMLModel
-import plotly.express as px
-import plotly.graph_objects as go
+import os
+from investment import RealEstateInvestmentAnalyzer
+from ml_model import RealEstateMLModel, train_and_save_models
 
 def load_ml_models():
-    """Load all trained ML models"""
+    """Load all trained ML models or train new ones if missing"""
     models = {}
     targets = ['total_investment', 'total_revenue', 'gross_profit', 'annual_rent', 'roi']
-    for target in targets:
-        try:
-            models[target] = RealEstateMLModel.load_model(f'model_{target}.joblib')
-        except Exception as e:
-            st.warning(f"Could not load model for {target}: {str(e)}")
-    return models
-
-def format_currency(value):
-    """Format currency values"""
-    return f"{value:,.2f} SAR"
-
-def format_percentage(value):
-    """Format percentage values"""
-    return f"{value:.2f}%"
-
-def create_comparison_chart(formula_values, ml_predictions, differences):
-    """Create a comparison chart using plotly"""
-    metrics = list(formula_values.keys())
     
-    fig = go.Figure()
+    # Check if models directory exists
+    if not os.path.exists('models'):
+        os.makedirs('models', exist_ok=True)
     
-    # Add Formula Values
-    fig.add_trace(go.Bar(
-        name='Formula Calculations',
-        x=metrics,
-        y=[formula_values[m] for m in metrics],
-        marker_color='rgb(55, 83, 109)'
-    ))
-    
-    # Add ML Predictions
-    fig.add_trace(go.Bar(
-        name='ML Predictions',
-        x=metrics,
-        y=[ml_predictions[m] for m in metrics],
-        marker_color='rgb(26, 118, 255)'
-    ))
-    
-    fig.update_layout(
-        title='Comparison of Formula vs ML Predictions',
-        xaxis_title='Metrics',
-        yaxis_title='Values (SAR)',
-        barmode='group',
-        height=500
+    # Check if models need to be trained
+    models_missing = any(
+        not os.path.exists(os.path.join('models', f'model_{target}.joblib'))
+        for target in targets
     )
     
-    return fig
+    if models_missing:
+        st.warning("ML models not found. Training new models...")
+        try:
+            train_and_save_models()
+            st.success("Models trained successfully!")
+        except Exception as e:
+            st.error(f"Error training models: {str(e)}")
+            return {}
+    
+    # Load models
+    for target in targets:
+        try:
+            model_path = os.path.join('models', f'model_{target}.joblib')
+            models[target] = RealEstateMLModel.load_model(model_path)
+        except Exception as e:
+            st.warning(f"Could not load model for {target}: {str(e)}")
+    
+    return models
 
 def main():
     st.set_page_config(
@@ -170,14 +152,17 @@ def main():
     
     # Title and description
     st.title("🏢 Real Estate Investment Analyzer")
-    st.markdown("""
-    Compare traditional formula-based calculations with machine learning predictions 
-    for real estate investment analysis.
-    """)
+    
+    # Add mode selection
+    analysis_mode = st.radio(
+        "Select Analysis Mode",
+        ["Formula Only", "Formula + ML Predictions"],
+        help="Choose whether to use only formula calculations or include ML predictions"
+    )
     
     # Initialize analyzers
     analyzer = RealEstateInvestmentAnalyzer()
-    ml_models = load_ml_models()
+    ml_models = load_ml_models() if analysis_mode == "Formula + ML Predictions" else {}
     
     # Sidebar for inputs
     with st.sidebar:
@@ -211,6 +196,7 @@ def main():
         
         analyze_button = st.button("Analyze Investment", type="primary")
     
+    
     if analyze_button:
         with st.spinner("Analyzing investment..."):
             try:
@@ -222,22 +208,6 @@ def main():
                     context_type=context_type
                 )
 
-                # Prepare input for ML predictions
-                ml_input = pd.DataFrame({
-                    'property_type': [context_type],
-                    'district': [district],
-                    'land_area': [land_area],
-                    'num_floors': [num_floors]
-                })
-
-                # Get ML predictions
-                ml_predictions = {}
-                for target, model in ml_models.items():
-                    try:
-                        ml_predictions[target] = model.predict(ml_input)[0]
-                    except Exception as e:
-                        st.error(f"Error predicting {target}: {str(e)}")
-                
                 # Extract formula values
                 details = formula_result["تقرير_تحليل_الاستثمار"]
                 formula_values = {
@@ -248,75 +218,36 @@ def main():
                     'roi': float(details["الإيرادات"]["العائد_على_الاستثمار"].replace("%", ""))
                 }
 
-                # Calculate differences
-                differences = {
-                    key: ((ml_predictions[key] - formula_values[key]) / formula_values[key]) * 100
-                    for key in formula_values.keys()
-                }
+                # Only do ML predictions if in ML mode and models are available
+                if analysis_mode == "Formula + ML Predictions" and ml_models:
+                    ml_input = pd.DataFrame({
+                        'property_type': [context_type],
+                        'district': [district],
+                        'land_area': [land_area],
+                        'num_floors': [num_floors]
+                    })
 
-                # Display results in tabs
-                tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Visualizations", "📝 Detailed Analysis"])
-                
-                with tab1:
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.subheader("Formula Calculations")
-                        for key, value in formula_values.items():
-                            if key != 'roi':
-                                st.metric(key.replace('_', ' ').title(), format_currency(value))
-                            else:
-                                st.metric(key.upper(), format_percentage(value))
-                    
-                    with col2:
-                        st.subheader("ML Predictions")
-                        for key, value in ml_predictions.items():
-                            if key != 'roi':
-                                st.metric(key.replace('_', ' ').title(), format_currency(value))
-                            else:
-                                st.metric(key.upper(), format_percentage(value))
-                    
-                    with col3:
-                        st.subheader("Difference (%)")
-                        for key, value in differences.items():
-                            st.metric(key.replace('_', ' ').title(), format_percentage(value))
-                
-                with tab2:
-                    # Create comparison chart
-                    fig = create_comparison_chart(formula_values, ml_predictions, differences)
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Add more visualizations as needed
-                    
-                with tab3:
-                    st.subheader("Detailed Analysis")
-                    
-                    # Calculate average absolute difference
-                    avg_diff = np.mean(np.abs(list(differences.values())))
-                    
-                    # Display accuracy metrics
-                    st.metric("Average Absolute Difference", format_percentage(avg_diff))
-                    
-                    # Recommendations based on differences
-                    st.subheader("Recommendations")
-                    for metric, diff in differences.items():
-                        abs_diff = abs(diff)
-                        metric_name = metric.replace('_', ' ').title()
-                        
-                        if abs_diff < 10:
-                            st.success(f"✅ {metric_name}: Predictions are very accurate ({format_percentage(abs_diff)} difference)")
-                        elif abs_diff < 20:
-                            st.warning(f"⚠️ {metric_name}: Moderate difference ({format_percentage(abs_diff)} difference)")
-                        else:
-                            st.error(f"❌ {metric_name}: Large difference ({format_percentage(abs_diff)} difference)")
-                    
-                    # Show raw data
-                    with st.expander("View Raw Data"):
-                        st.json({
-                            "Formula Results": formula_result,
-                            "ML Predictions": {k: float(v) for k, v in ml_predictions.items()},
-                            "Differences (%)": {k: float(v) for k, v in differences.items()}
-                        })
+                    ml_predictions = {}
+                    for target, model in ml_models.items():
+                        try:
+                            ml_predictions[target] = model.predict(ml_input)[0]
+                        except Exception as e:
+                            st.error(f"Error predicting {target}: {str(e)}")
+                            ml_predictions[target] = formula_values[target]
+
+                    differences = {
+                        key: ((ml_predictions[key] - formula_values[key]) / formula_values[key]) * 100
+                        for key in formula_values.keys()
+                    }
+                else:
+                    ml_predictions = formula_values.copy()
+                    differences = {k: 0 for k in formula_values.keys()}
+
+                # Display results based on mode
+                if analysis_mode == "Formula Only":
+                    display_formula_results(formula_values)
+                else:
+                    display_comparison_results(formula_values, ml_predictions, differences)
 
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
