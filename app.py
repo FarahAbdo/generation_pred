@@ -135,10 +135,6 @@ def main():
     
     # Title and description
     st.title("🏢 Real Estate Investment Analyzer")
-    st.markdown("""
-    This tool helps analyze real estate investments using both traditional formula-based calculations 
-    and machine learning predictions. Compare different approaches and make informed decisions.
-    """)
     
     # Add mode selection
     analysis_mode = st.radio(
