@@ -1,119 +1,105 @@
-# import streamlit as st
-# import json
-# from investmentt import RealEstateInvestmentAnalyzer  # This imports your existing class
-
-# def main():
-#     st.set_page_config(page_title="Real Estate Investment Analyzer", layout="wide")
-    
-#     # Title and description
-#     st.title("Real Estate Investment Analyzer")
-#     st.markdown("Analyze different types of real estate investments in Saudi Arabia")
-
-#     # Initialize analyzer
-#     analyzer = RealEstateInvestmentAnalyzer()
-
-#     # Create columns for input
-#     col1, col2 = st.columns(2)
-
-#     with col1:
-#         # Input fields
-#         context_type = st.selectbox(
-#             "Property Type",
-#             ["tower", "hotel", "administrative_building", "residential_compound", 
-#              "villa", "villas", "commercial_mall"]
-#         )
-
-#         district = st.selectbox(
-#             "District",
-#             ["النرجس", "الملقا", "القيروان", "الياسمين", "العارض", "حطين"]
-#         )
-
-#     with col2:
-#         land_area = st.number_input(
-#             "Land Area (sq meters)",
-#             min_value=100,
-#             max_value=100000,
-#             value=5000
-#         )
-
-#         num_floors = st.number_input(
-#             "Number of Floors",
-#             min_value=1,
-#             max_value=20,
-#             value=5
-#         )
-
-#     # Analysis button
-#     if st.button("Generate Analysis"):
-#         try:
-#             # Use your existing analyzer class
-#             result = analyzer.generate_investment_report(
-#                 land_area=land_area,
-#                 district=district,
-#                 num_floors=num_floors,
-#                 context_type=context_type
-#             )
-
-#             # Display results
-#             st.header("Investment Analysis Report")
-
-#             # Project Details
-#             st.subheader("Project Details")
-#             details = result["تقرير_تحليل_الاستثمار"]["تفاصيل_المشروع"]
-#             col1, col2 = st.columns(2)
-#             with col1:
-#                 st.metric("Location", details["الموقع"])
-#                 st.metric("Land Area", details["مساحة_الأرض"])
-#             with col2:
-#                 st.metric("Effective Building Area", details["مساحة_البناء_الفعالة"])
-
-#             # Costs
-#             st.subheader("Costs")
-#             costs = result["تقرير_تحليل_الاستثمار"]["التكاليف"]
-#             col1, col2, col3 = st.columns(3)
-#             with col1:
-#                 st.metric("Land Cost", costs["تكلفة_الأرض"])
-#             with col2:
-#                 st.metric("Construction Cost", costs["تكلفة_البناء"])
-#             with col3:
-#                 st.metric("Total Investment", costs["إجمالي_الاستثمار"])
-
-#             # Revenue and Returns
-#             st.subheader("Revenue and Returns")
-#             revenue = result["تقرير_تحليل_الاستثمار"]["الإيرادات"]
-#             col1, col2, col3 = st.columns(3)
-#             with col1:
-#                 st.metric("Sales Revenue", revenue["إيرادات_البيع"])
-#                 st.metric("Gross Profit", revenue["الربح_الإجمالي"])
-#             with col2:
-#                 st.metric("Annual Rent", revenue["الإيجار_السنوي"])
-#                 st.metric("Net Annual Rent", revenue["صافي_الإيجار_السنوي"])
-#             with col3:
-#                 st.metric("Profit Margin", revenue["هامش_الربح"])
-#                 st.metric("ROI (Rental)", revenue["العائد_على_الاستثمار"])
-
-#             # Raw JSON data (expandable)
-#             with st.expander("View Raw Data"):
-#                 st.json(result)
-
-#         except Exception as e:
-#             st.error(f"An error occurred: {str(e)}")
-
-# if __name__ == "__main__":
-#     main()
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import os
 from investmentt import RealEstateInvestmentAnalyzer
-from ml_model import RealEstateMLModel, train_and_save_models
+from ml_model import RealEstateMLModel, train_and_save_models, generate_synthetic_data
+import plotly.graph_objects as go
 
-if not os.path.exists('./.streamlit/models'):
-    os.makedirs('./.streamlit/models', exist_ok=True)
-
-# Update model paths to use the Streamlit shared folder
+# Create a cache directory in the Streamlit shared folder
 MODEL_DIR = './.streamlit/models'
+if not os.path.exists(MODEL_DIR):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+def format_currency(value):
+    """Format currency values"""
+    return f"{value:,.2f} SAR"
+
+def format_percentage(value):
+    """Format percentage values"""
+    return f"{value:.2f}%"
+
+def create_comparison_chart(formula_values, ml_predictions):
+    """Create a comparison chart using plotly"""
+    metrics = list(formula_values.keys())
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        name='Formula Calculations',
+        x=metrics,
+        y=[formula_values[m] for m in metrics],
+        marker_color='rgb(55, 83, 109)'
+    ))
+    
+    fig.add_trace(go.Bar(
+        name='ML Predictions',
+        x=metrics,
+        y=[ml_predictions[m] for m in metrics],
+        marker_color='rgb(26, 118, 255)'
+    ))
+    
+    fig.update_layout(
+        title='Comparison of Formula vs ML Predictions',
+        xaxis_title='Metrics',
+        yaxis_title='Values (SAR)',
+        barmode='group',
+        height=500
+    )
+    
+    return fig
+
+def display_formula_results(formula_values):
+    """Display formula-only results"""
+    st.header("Investment Analysis Results")
+    
+    for key, value in formula_values.items():
+        if key != 'roi':
+            st.metric(key.replace('_', ' ').title(), format_currency(value))
+        else:
+            st.metric(key.upper(), format_percentage(value))
+
+def display_comparison_results(formula_values, ml_predictions, differences):
+    """Display comparison results"""
+    st.header("Investment Analysis Results")
+    
+    # Create three columns for display
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.subheader("Formula Calculations")
+        for key, value in formula_values.items():
+            if key != 'roi':
+                st.metric(key.replace('_', ' ').title(), format_currency(value))
+            else:
+                st.metric(key.upper(), format_percentage(value))
+    
+    with col2:
+        st.subheader("ML Predictions")
+        for key, value in ml_predictions.items():
+            if key != 'roi':
+                st.metric(key.replace('_', ' ').title(), format_currency(value))
+            else:
+                st.metric(key.upper(), format_percentage(value))
+    
+    with col3:
+        st.subheader("Difference (%)")
+        for key, value in differences.items():
+            st.metric(key.replace('_', ' ').title(), format_percentage(value))
+    
+    # Add comparison chart
+    st.plotly_chart(create_comparison_chart(formula_values, ml_predictions), use_container_width=True)
+    
+    # Add analysis section
+    st.header("Analysis")
+    avg_diff = np.mean(np.abs(list(differences.values())))
+    
+    if avg_diff < 10:
+        st.success(f"Average difference: {format_percentage(avg_diff)} - ML predictions are very accurate!")
+    elif avg_diff < 20:
+        st.warning(f"Average difference: {format_percentage(avg_diff)} - ML predictions show moderate deviation.")
+    else:
+        st.error(f"Average difference: {format_percentage(avg_diff)} - ML predictions show significant deviation.")
 
 @st.cache_resource
 def load_ml_models():
@@ -140,7 +126,6 @@ def load_ml_models():
     
     return models
 
-
 def main():
     st.set_page_config(
         page_title="Real Estate Investment Analyzer",
@@ -150,6 +135,10 @@ def main():
     
     # Title and description
     st.title("🏢 Real Estate Investment Analyzer")
+    st.markdown("""
+    This tool helps analyze real estate investments using both traditional formula-based calculations 
+    and machine learning predictions. Compare different approaches and make informed decisions.
+    """)
     
     # Add mode selection
     analysis_mode = st.radio(
@@ -193,7 +182,6 @@ def main():
         )
         
         analyze_button = st.button("Analyze Investment", type="primary")
-    
     
     if analyze_button:
         with st.spinner("Analyzing investment..."):
@@ -246,6 +234,10 @@ def main():
                     display_formula_results(formula_values)
                 else:
                     display_comparison_results(formula_values, ml_predictions, differences)
+
+                # Display full report in expandable section
+                with st.expander("View Full Investment Report"):
+                    st.json(formula_result)
 
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
