@@ -109,6 +109,12 @@ import os
 from investmentt import RealEstateInvestmentAnalyzer
 from ml_model import RealEstateMLModel, train_and_save_models
 
+if not os.path.exists('./.streamlit/models'):
+    os.makedirs('./.streamlit/models', exist_ok=True)
+
+# Update model paths to use the Streamlit shared folder
+MODEL_DIR = './.streamlit/models'
+
 @st.cache_resource
 def load_ml_models():
     """Load all trained ML models or train new ones if missing"""
