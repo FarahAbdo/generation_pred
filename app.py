@@ -109,39 +109,31 @@ import os
 from investmentt import RealEstateInvestmentAnalyzer
 from ml_model import RealEstateMLModel, train_and_save_models
 
+@st.cache_resource
 def load_ml_models():
     """Load all trained ML models or train new ones if missing"""
     models = {}
     targets = ['total_investment', 'total_revenue', 'gross_profit', 'annual_rent', 'roi']
     
-    # Check if models directory exists
-    if not os.path.exists('models'):
-        os.makedirs('models', exist_ok=True)
-    
-    # Check if models need to be trained
-    models_missing = any(
-        not os.path.exists(os.path.join('models', f'model_{target}.joblib'))
-        for target in targets
-    )
-    
-    if models_missing:
-        st.warning("ML models not found. Training new models...")
-        try:
-            train_and_save_models()
-            st.success("Models trained successfully!")
-        except Exception as e:
-            st.error(f"Error training models: {str(e)}")
-            return {}
-    
-    # Load models
-    for target in targets:
-        try:
-            model_path = os.path.join('models', f'model_{target}.joblib')
-            models[target] = RealEstateMLModel.load_model(model_path)
-        except Exception as e:
-            st.warning(f"Could not load model for {target}: {str(e)}")
+    try:
+        # Always train new models in cloud environment
+        st.info("Training ML models...")
+        train_and_save_models(model_dir=MODEL_DIR)
+        st.success("Models trained successfully!")
+        
+        # Load the trained models
+        for target in targets:
+            try:
+                model_path = os.path.join(MODEL_DIR, f'model_{target}.joblib')
+                models[target] = RealEstateMLModel.load_model(model_path)
+            except Exception as e:
+                st.warning(f"Could not load model for {target}: {str(e)}")
+    except Exception as e:
+        st.error(f"Error training models: {str(e)}")
+        return {}
     
     return models
+
 
 def main():
     st.set_page_config(
