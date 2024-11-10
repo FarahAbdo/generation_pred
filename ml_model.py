@@ -55,7 +55,12 @@ class RealEstateMLModel:
         return self.model.predict(X)
     
     def save_model(self, filename):
-        joblib.dump(self.model, filename)
+        """Save the model with error handling"""
+        try:
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            joblib.dump(self.model, filename)
+        except Exception as e:
+            print(f"Error saving model: {e}")
     
     @classmethod
     def load_model(cls, filename):
@@ -214,19 +219,20 @@ def train_models():
         models[target] = model
     
     return models
-def train_and_save_models():
+def train_and_save_models(model_dir='./.streamlit/models'):
     """Train and save models for all targets"""
-    # Create models directory if it doesn't exist
-    os.makedirs('models', exist_ok=True)
+    print("Generating synthetic data...")
+    df = generate_synthetic_data(1000)
     
-    print("Generating training data...")
-    df = generate_training_data(1000)
+    # Create models directory if it doesn't exist
+    os.makedirs(model_dir, exist_ok=True)
     
     targets = ['total_investment', 'total_revenue', 'gross_profit', 
               'annual_rent', 'roi']
     
     features = ['property_type', 'district', 'land_area', 'num_floors']
     
+    models = {}
     for target in targets:
         print(f"\nTraining model for {target}...")
         
@@ -240,10 +246,13 @@ def train_and_save_models():
         model = RealEstateMLModel()
         model.fit(X_train, y_train)
         
-        # Save model in models directory
-        model_path = os.path.join('models', f'model_{target}.joblib')
+        # Save model
+        model_path = os.path.join(model_dir, f'model_{target}.joblib')
         model.save_model(model_path)
+        models[target] = model
         print(f"Model saved as {model_path}")
+    
+    return models
         
 if __name__ == "__main__":
     print("Starting model training process...")
