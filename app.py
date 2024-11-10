@@ -106,7 +106,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
-from investment import RealEstateInvestmentAnalyzer
+from investmentt import RealEstateInvestmentAnalyzer
 from ml_model import RealEstateMLModel, train_and_save_models
 
 def load_ml_models():
